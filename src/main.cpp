@@ -23,6 +23,7 @@
 /*______Import Libraries_______*/
 #include <Arduino.h>
 #include <SPI.h>
+#include <Wire.h>
 #include "Adafruit_GFX.h"
 #include "Adafruit_ILI9341.h"
 #include <XPT2046_Touchscreen.h>
@@ -283,7 +284,7 @@ void DisplayResult()
  * @param[in] xPos  X position of text output
  * @return    None
  *********************************************************************/
-void draw_Result_Box(int color, char text[10], int xPos)
+void draw_Result_Box(int color, String text, int xPos)
 {
    //Draw the Result Box
    tft.fillRect(0, 0, 240, 80, color);
@@ -377,12 +378,12 @@ void loop() {
   
     if (result==true) {
       if (Number == codenum) {
-        draw_Result_Box(ILI9341_GREEN,"CODE OK",60);
+        draw_Result_Box(ILI9341_GREEN,"CODE OK",(int)60);
         ledcWriteTone(0,1000);
         delay(800);
         ledcWriteTone(0,0);
       } else {
-        draw_Result_Box(ILI9341_RED, "WRONG CODE",30);
+        draw_Result_Box(ILI9341_RED, "WRONG CODE",(int)30);
         for (int i=0;i< 3;i++) {
           ledcWriteTone(0,4000);
           delay(100);
