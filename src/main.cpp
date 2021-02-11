@@ -59,7 +59,7 @@
 
 
 /*___Keylock spezific definitions___*/
-#define codenum 0000    // you can change this to any number between 0 and 999999
+#define codenum 0000    // 42 is the answer for everything, but you can change this to any number between 0 and 999999
 
 /*___End of Keylock spezific definitions___*/
 
@@ -84,74 +84,15 @@ boolean result = false;
 bool Touch_pressed = false;
 TS_Point p;
 
-
-void setup() {
-  Serial.begin(115200); //Use serial monitor for debugging
-
-  pinMode(TFT_LED, OUTPUT); // define as output for backlight control
-
-  Serial.println("Init TFT and Touch...");
-  tft.begin();
-  touch.begin();
-  Serial.print("tftx ="); Serial.print(tft.width()); Serial.print(" tfty ="); Serial.println(tft.height());
-  tft.fillScreen(ILI9341_BLACK);
-  
-  IntroScreen();
-  digitalWrite(TFT_LED, LOW);    // LOW to turn backlight on; 
-
-  delay(1500);
-
-  digitalWrite(TFT_LED, HIGH);    // HIGH to turn backlight off - will hide the display during drawing
-  draw_BoxNButtons(); 
-  digitalWrite(TFT_LED, LOW);    // LOW to turn backlight on; 
-
-  //sound configuration
-  ledcSetup(0,1E5,12);
-  ledcAttachPin(21,0);
-
+/********************************************************************//**
+ * @brief     plays ack tone (beep) after button pressing
+ * @param[in] None
+ * @return    None
+ *********************************************************************/
+void Button_ACK_Tone(){
+  ledcWriteTone(0,4000);
 }
 
-void loop() {
-  // check touch screen for new events
-  if (Touch_Event()== true) { 
-    X = p.y; Y = p.x;
-    Touch_pressed = true;
-    
-  } else {
-    Touch_pressed = false;
-  }
-
-  // if touch is pressed detect pressed buttons
-  if (Touch_pressed == true) {
-    
-    DetectButtons();
-  
-    if (result==true) {
-      if (Number == codenum) {
-        draw_Result_Box(ILI9341_GREEN,"CODE OK",60);
-        ledcWriteTone(0,1000);
-        delay(800);
-        ledcWriteTone(0,0);
-      } else {
-        draw_Result_Box(ILI9341_RED, "WRONG CODE",30);
-        for (int i=0;i< 3;i++) {
-          ledcWriteTone(0,4000);
-          delay(100);
-          ledcWriteTone(0,0);
-          delay(50);      
-        }
-      }
-      delay(1000);
-      Number = 0; 
-      result=false;
-    }
-
-    DisplayResult(); 
-  }    
-  delay(100);
-  ledcWriteTone(0,0);
-
-}
 
 /********************************************************************//**
  * @brief     detects a touch event and converts touch data 
@@ -289,6 +230,28 @@ void DetectButtons()
 
 }
 
+/********************************************************************//**
+ * @brief     shows the intro screen in setup procedure
+ * @param[in] None
+ * @return    None
+ *********************************************************************/
+void IntroScreen()
+{
+  //Draw the Result Box
+  tft.fillRect(0, 0, 240, 320, ILI9341_WHITE);
+  tft.drawRGBBitmap(20,80, Zihatec_Logo,200,60);
+  tft.setTextSize(0);
+  tft.setTextColor(ILI9341_BLACK);
+  tft.setFont(&FreeSansBold9pt7b);  
+
+  tft.setCursor(45, 190);
+  tft.println("ArduiTouch ESP");
+  
+  tft.setCursor(43, 215);
+  tft.println("Keylock example");
+
+}
+
 
 /********************************************************************//**
  * @brief     shows the entered numbers (stars)
@@ -310,28 +273,6 @@ void DisplayResult()
        s1 = s1 + "*";
        tft.println(s1); //update new value
     }   
-}
-
-/********************************************************************//**
- * @brief     shows the intro screen in setup procedure
- * @param[in] None
- * @return    None
- *********************************************************************/
-void IntroScreen()
-{
-  //Draw the Result Box
-  tft.fillRect(0, 0, 240, 320, ILI9341_WHITE);
-  tft.drawRGBBitmap(20,80, Zihatec_Logo,200,60);
-  tft.setTextSize(0);
-  tft.setTextColor(ILI9341_BLACK);
-  tft.setFont(&FreeSansBold9pt7b);  
-
-  tft.setCursor(45, 190);
-  tft.println("ArduiTouch ESP");
-  
-  tft.setCursor(43, 215);
-  tft.println("Keylock example");
-
 }
 
 
@@ -393,12 +334,72 @@ void draw_BoxNButtons()
   }
 }
 
+void setup() {
+  Serial.begin(115200); //Use serial monitor for debugging
 
-/********************************************************************//**
- * @brief     plays ack tone (beep) after button pressing
- * @param[in] None
- * @return    None
- *********************************************************************/
-void Button_ACK_Tone(){
-  ledcWriteTone(0,4000);
+  pinMode(TFT_LED, OUTPUT); // define as output for backlight control
+
+  Serial.println("Init TFT and Touch...");
+  tft.begin();
+  touch.begin();
+  Serial.print("tftx ="); Serial.print(tft.width()); Serial.print(" tfty ="); Serial.println(tft.height());
+  tft.fillScreen(ILI9341_BLACK);
+  
+  IntroScreen();
+  digitalWrite(TFT_LED, LOW);    // LOW to turn backlight on; 
+
+  delay(1500);
+
+  digitalWrite(TFT_LED, HIGH);    // HIGH to turn backlight off - will hide the display during drawing
+  draw_BoxNButtons(); 
+  digitalWrite(TFT_LED, LOW);    // LOW to turn backlight on; 
+
+  //sound configuration
+  ledcSetup(0,1E5,12);
+  ledcAttachPin(21,0);
+
 }
+
+void loop() {
+  // check touch screen for new events
+  if (Touch_Event()== true) { 
+    X = p.y; Y = p.x;
+    Touch_pressed = true;
+    
+  } else {
+    Touch_pressed = false;
+  }
+
+  // if touch is pressed detect pressed buttons
+  if (Touch_pressed == true) {
+    
+    DetectButtons();
+  
+    if (result==true) {
+      if (Number == codenum) {
+        draw_Result_Box(ILI9341_GREEN,"CODE OK",60);
+        ledcWriteTone(0,1000);
+        delay(800);
+        ledcWriteTone(0,0);
+      } else {
+        draw_Result_Box(ILI9341_RED, "WRONG CODE",30);
+        for (int i=0;i< 3;i++) {
+          ledcWriteTone(0,4000);
+          delay(100);
+          ledcWriteTone(0,0);
+          delay(50);      
+        }
+      }
+      delay(1000);
+      Number = 0; 
+      result=false;
+    }
+
+    DisplayResult(); 
+  }    
+  delay(100);
+  ledcWriteTone(0,0);
+
+}
+
+
