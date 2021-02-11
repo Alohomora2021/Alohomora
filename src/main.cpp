@@ -59,7 +59,7 @@
 
 
 /*___Keylock spezific definitions___*/
-#define codenum 42    // 42 is the answer for everything, but you can change this to any number between 0 and 999999
+#define codenum 0000    // you can change this to any number between 0 and 999999
 
 /*___End of Keylock spezific definitions___*/
 
