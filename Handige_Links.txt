@@ -6,4 +6,7 @@ https://arduinogetstarted.com/tutorials/arduino-electromagnetic-lock
 https://www.amazon.fr/dp/B07Y1Z14G5/ref=dp_prsubs_1
 
 8,49EUR
-https://www.amazon.fr/dp/B08KTJSK9Q/ref=sspa_dk_detail_0?psc=1&pd_rd_i=B08KTJSK9Q&pd_rd_w=wWY4b&pf_rd_p=366fc4a6-d352-47e9-b664-9fc6d35db13a&pd_rd_wg=WovJc&pf_rd_r=EZV7FADB76ZGRCM4ECQ9&pd_rd_r=0667ab82-e767-4045-b22f-3bb66a7ae9ce&spLa=ZW5jcnlwdGVkUXVhbGlmaWVyPUExV1pWSFRTTUlTMTJNJmVuY3J5cHRlZElkPUEwNTc2NTgwM1I2RUJST1IzSU43OSZlbmNyeXB0ZWRBZElkPUEwNzIxNjg3NTY1WU5VUlJWQ1NVJndpZGdldE5hbWU9c3BfZGV0YWlsJmFjdGlvbj1jbGlja1JlZGlyZWN0JmRvTm90TG9nQ2xpY2s9dHJ1ZQ==
+https://www.amazon.fr/dp/B08KTJSK9Q/ref=sspa_dk_detail_0?psc=1&pd_rd_i=B08KTJSK9Q&pd_rd_w=wWY4b&pf_rd_p=366fc4a6-d352-47e9-b664-9fc6d35db13a&pd_rd_wg=WovJc&pf_rd_r=EZV7FADB76ZGRCM4ECQ9&pd_rd_r=0667ab82-e767-4045-b22f-3bb66a7ae9ce&spLa=ZW5jcnlwdGVkUXVhbGlmaWVyPUExV1pWSFRTTUlTMTJNJmVuY3J5cHRlZElkPUEwNTc2NTgwM1I2RUJST1IzSU43OSZlbmNyeXB0ZWRBZElkPUEwNzIxNjg3NTY1WU5VUlJWQ1NVJndpZGdldE5hbWU9c3BfZGV0YWlsJmFjdGlvbj1jbGlja1JlZGlyZWN0JmRvTm90TG9nQ2xpY2s9dHJ1ZQ== 
+
+8EUR (solenoide)
+https://www.amazon.fr/dp/B08CC5GVRP/ref=sspa_dk_detail_4?psc=1&pd_rd_i=B08CC5GVRP&pd_rd_w=wWY4b&pf_rd_p=366fc4a6-d352-47e9-b664-9fc6d35db13a&pd_rd_wg=WovJc&pf_rd_r=EZV7FADB76ZGRCM4ECQ9&pd_rd_r=0667ab82-e767-4045-b22f-3bb66a7ae9ce&spLa=ZW5jcnlwdGVkUXVhbGlmaWVyPUEyS0U3UzBBTjlDQjEmZW5jcnlwdGVkSWQ9QTA1OTA1MTExRFJCVkNEUEZBV1MxJmVuY3J5cHRlZEFkSWQ9QTAyMTQ2OTIzTEhURTFNRVJFRzJSJndpZGdldE5hbWU9c3BfZGV0YWlsJmFjdGlvbj1jbGlja1JlZGlyZWN0JmRvTm90TG9nQ2xpY2s9dHJ1ZQ==
