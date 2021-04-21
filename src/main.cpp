@@ -1,406 +1,687 @@
 /*
- *  Application note: Simple Keylock / Keypad for ArduiTouch and ESP32  
- *  Version 1.0
- *  Copyright (C) 2019  Hartmut Wendt  www.zihatec.de
- *  
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/   
+ * Small Program to Simulate a Numpad using a 2.4" TFT Touchscreen
+ * Program does not act as an USB HID Device
+ * 
+ * Note:
+ * This version is complete with styling and numbers,
+ * if you want the smaller version get the "numpad-layout" program
+ * from https://github.com/williamtavares/Arduino-Uno-NumPad
+ * 
+ * Enjoy!
+*/
 
- 
+#include <Adafruit_GFX.h>
+#include <TouchScreen.h>
+#include <MCUFRIEND_kbv.h>
 
-/*______Import Libraries_______*/
-#include <Arduino.h>
-#include <SPI.h>
-#include <Wire.h>
-#include "Adafruit_GFX.h"
-#include "Adafruit_ILI9341.h"
-#include <XPT2046_Touchscreen.h>
-#include <Fonts/FreeSansBold9pt7b.h>
-#include "usergraphics.h"
-/*______End of Libraries_______*/
+//wifi and MQTT necessities
+#include <WiFi.h>
+#include <PubSubClient.h> //pio lib install "knolleary/PubSubClient"
 
+// OTA necessities
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncElegantOTA.h>
 
-/*__Pin definitions for the ESP8266__*/
-#define TFT_CS   5
-#define TFT_DC   4
-#define TFT_LED  15  
-#define TFT_MOSI 23
-#define TFT_CLK  18
-#define TFT_RST  22
-#define TFT_MISO 19
-#define TFT_LED  15  
+//define router and broker
+#define SSID          "NETGEAR68"
+#define PWD           "excitedtuba713"
 
-#define HAVE_TOUCHPAD
-#define TOUCH_CS 14
-#define TOUCH_IRQ 2
+#define MQTT_SERVER   "192.168.1.2" // could change if the setup is moved
+#define MQTT_PORT     1883
 
-/*_______End of definitions______*/
+bool connected;
+bool wifi = true;
 
- 
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg[50];
+int value = 0;
 
-/*____Calibrate Touchscreen_____*/
-#define MINPRESSURE 10      // minimum required force for touch event
-#define TS_MINX 370
-#define TS_MINY 470
-#define TS_MAXX 3700
-#define TS_MAXY 3600
-/*______End of Calibration______*/
+// OTA
+AsyncWebServer server(80);
 
+//define callback method
+void callback(char *topic, byte *message, unsigned int length);
 
-/*___Keylock spezific definitions___*/
-#define codenum 0000    // 42 is the answer for everything, but you can change this to any number between 0 and 999999
-
-/*___End of Keylock spezific definitions___*/
-
-
-//Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
-//XPT2046_Touchscreen touch(TOUCH_CS);
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
-XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
-
-
-
-String symbol[4][4] = {
-  { "7", "8", "9" },
-  { "4", "5", "6" },
-  { "1", "2", "3" },
-  { "C", "0", "OK" }
-};
-int X,Y;
-long Num1,Num2,Number;
-char action;
-boolean result = false;
-bool Touch_pressed = false;
-TS_Point p;
-
-/********************************************************************//**
- * @brief     plays ack tone (beep) after button pressing
- * @param[in] None
- * @return    None
- *********************************************************************/
-void Button_ACK_Tone(){
-  ledcWriteTone(0,4000);
-}
-
-
-/********************************************************************//**
- * @brief     detects a touch event and converts touch data 
- * @param[in] None
- * @return    boolean (true = touch pressed, false = touch unpressed) 
- *********************************************************************/
-bool Touch_Event() {
-  p = touch.getPoint(); 
-  delay(1);
-  #ifdef touch_yellow_header
-    p.x = map(p.x, TS_MINX, TS_MAXX, 320, 0); // yellow header
-  #else
-    p.x = map(p.x, TS_MINX, TS_MAXX, 0, 320); // black header
-  #endif
-  p.y = map(p.y, TS_MINY, TS_MAXY, 0, 240);
-  if (p.z > MINPRESSURE) return true;  
-  return false;  
-}
-
-
-
-/********************************************************************//**
- * @brief     detecting pressed buttons with the given touchscreen values
- * @param[in] None
- * @return    None
- *********************************************************************/
-void DetectButtons()
+// function for establishing wifi connection, do not touch
+void setup_wifi()
 {
-  if (X>185) //Detecting Buttons on Column 1
+  delay(10);
+  Serial.println("Connecting to WiFi..");
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(SSID, PWD);
+
+  while (WiFi.status() != WL_CONNECTED)
   {
-    if (Y>265) //If cancel Button is pressed
-    {Serial.println ("Button Cancel"); Number=Num1=Num2=0; result=false;}
-    
-     if (Y>205 && Y<255) //If Button 1 is pressed
-    {Serial.println ("Button 1"); 
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=1;
-    else
-    Number = (Number*10) + 1; //Pressed twice
-    }
-    
-     if (Y>145 && Y<195) //If Button 4 is pressed
-    {Serial.println ("Button 4"); 
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=4;
-    else
-    Number = (Number*10) + 4; //Pressed twice
-    }
-    
-     if (Y>85 && Y<135) //If Button 7 is pressed
-    {Serial.println ("Button 7");
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=7;
-    else
-    Number = (Number*10) + 7; //Pressed twice
-    } 
+    delay(500);
+    Serial.print(".");
   }
 
-  if (X<175 && X>85) //Detecting Buttons on Column 2
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+
+// Touch display defines
+#define LCD_RD  2  //LED
+#define LCD_WR  4
+#define LCD_RS 15  //or LCD_CD - hard-wired to GPIO35
+#define LCD_CS 33  //hard-wired to A3 (GPIO34)
+#define LCD_RST 32 //hard-wired to A4 (GPIO36)
+
+#define LCD_D0 12
+#define LCD_D1 13
+#define LCD_D2 26
+#define LCD_D3 25
+#define LCD_D4 17
+#define LCD_D5 16
+#define LCD_D6 27
+#define LCD_D7 14
+
+MCUFRIEND_kbv tft;
+
+#define DO 23   // pin that opens the door to the key
+
+#define YP LCD_CS  // LCD_CS
+#define XM LCD_RS  // LCD_RS
+#define YM LCD_D1  // LCD_D1
+#define XP LCD_D0  // LCD_D0
+
+#define TS_MINX 941
+#define TS_MINY 896
+#define TS_MAXX 111
+#define TS_MAXY 24
+
+//Color Definitons
+#define BLACK     0x0000
+#define BLUE      0x001F
+#define GREY      0xCE79
+#define LIGHTGREY 0xDEDB
+#define NEONGREEN 0x07E0
+
+#define MINPRESSURE 100
+#define MAXPRESSURE 1000
+
+// For better pressure precision, we need to know the resistance
+// between X+ and X- Use any multimeter to read it
+// For the one we're using, its 300 ohms across the X plate
+// Pins A2-A6
+
+#include "TouchScreen_kbv.h"         //my hacked version
+#define TouchScreen TouchScreen_kbv
+#define TSPoint     TSPoint_kbv
+
+TouchScreen ts = TouchScreen(XP, YP, XM, YM, 364); 
+
+//Size of key containers 60px
+#define BOXSIZE 60
+
+//text width
+#define textsize 40
+
+// color scheme
+uint16_t tbgcolor = BLACK;
+uint16_t boxcolor = NEONGREEN;
+
+// input en correcte code
+byte code[4] = {1, 2, 3, 4};
+byte input[4] = {11, 11, 11, 11};
+
+// positie van de input (0-3)
+byte pos;
+
+// aantal pogingen
+byte attempts = 3;
+
+// positie van de input display
+//double DispCursorX;
+double firstRowCursorY;
+
+// extra variabele voor correcte werking
+bool isAtEnd = false;
+bool isTouching = false;
+
+//2.4 = 240 x 320
+//Height 319 to fit on screen
+
+//MCUFRIEND_kbv tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+
+  //Container variables for touch coordinates
+  int X, Y, Z;
+
+  
+  //----- Screen reference positions -----//
+  //Screen height without hidden pixel
+  double tHeight = tft.height()-1;
+  //Centering the mid square
+  double center = (tft.width()/2)-(BOXSIZE/2);
+  //Space between squares
+  double padding = 5;
+  //Position of squares to the left and right of center
+  double fromCenter = BOXSIZE + padding;
+  //Second row Y-Axis position
+  double secondRow = BOXSIZE + padding;
+  //Third row Y-Axis position
+  double thirdRow = secondRow + BOXSIZE + padding;
+  //Fourth row Y-Axis position
+  double fourthRow = thirdRow + BOXSIZE + padding;
+  //Fifth row Y-Axis position
+  double fifthRow = fourthRow + BOXSIZE + padding;
+  //Y-Axis align for all squares
+  double verticalAlign = (tHeight-((BOXSIZE * 5)+(padding * 4)))/2;
+  //Left column starting x posision
+  double leftColPositionX = center - fromCenter;
+  //Mid column starting x posision
+  double midColPositionX = center;
+  //Right column starting x posision
+  double rightColPositionX = center + fromCenter;
+
+void createButtons(){
+  //(initial x,initial y,width,height,color)
+  double secondRowVertialAlign = secondRow + verticalAlign;
+  double thirdRowVertialAlign = thirdRow + verticalAlign;
+  double fourthRowVertialAlign = fourthRow + verticalAlign;
+  double fifthRowVertialAlign = fifthRow + verticalAlign;
+
+  /***Draw filled squares with specified dimensions and position***/
+  //First Row
+  //tft.fillRect(leftColPositionX, verticalAlign, BOXSIZE, BOXSIZE, GREY);
+  tft.fillRect(leftColPositionX, verticalAlign, (3*BOXSIZE)+(2*padding), BOXSIZE, tbgcolor);
+  //tft.fillRect(rightColPositionX, verticalAlign, BOXSIZE, BOXSIZE, GREY);
+  
+  //Second Row
+  tft.fillRect(leftColPositionX, secondRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(midColPositionX, secondRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(rightColPositionX, secondRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+
+  //Third Row
+  tft.fillRect(leftColPositionX, thirdRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(midColPositionX, thirdRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(rightColPositionX, thirdRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+
+  //Fourth Row
+  tft.fillRect(leftColPositionX, fourthRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(midColPositionX, fourthRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(rightColPositionX, fourthRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+
+  //Fifth Row
+  tft.fillRect(leftColPositionX, fifthRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(midColPositionX, fifthRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+  tft.fillRect(rightColPositionX, fifthRowVertialAlign, BOXSIZE, BOXSIZE, tbgcolor);
+
+  /***Draw Borders around squares***/
+  //First Row
+  //tft.drawRect(leftColPositionX, verticalAlign, BOXSIZE, BOXSIZE, BLACK);
+  tft.drawRect(leftColPositionX, verticalAlign, (3*BOXSIZE)+(2*padding), BOXSIZE, boxcolor);
+  //tft.drawRect(rightColPositionX, verticalAlign, BOXSIZE, BOXSIZE, BLACK);
+
+  //Second Row
+  tft.drawRect(leftColPositionX, secondRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(midColPositionX, secondRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(rightColPositionX, secondRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+
+  //Third Row
+  tft.drawRect(leftColPositionX, thirdRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(midColPositionX, thirdRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(rightColPositionX, thirdRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+
+  //Fourth Row
+  tft.drawRect(leftColPositionX, fourthRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(midColPositionX, fourthRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(rightColPositionX, fourthRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+
+  //Fifth Row
+  tft.drawRect(leftColPositionX, fifthRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(midColPositionX, fifthRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+  tft.drawRect(rightColPositionX, fifthRowVertialAlign, BOXSIZE, BOXSIZE, boxcolor);
+}
+
+void insertNumbers(){
+  //Centers text horizontally on all three columns
+  double leftColCursorX   = leftColPositionX +(BOXSIZE/3);
+  double midColCursorX    = midColPositionX  +(BOXSIZE/3);
+  double rightColCursorX  = rightColPositionX+(BOXSIZE/3);
+  //Centers text horizontally on all four rows
+  double firstRowCursorY  = verticalAlign+(BOXSIZE/4);
+  double secondRowCursorY = secondRow + firstRowCursorY;
+  double thirdRowCursorY  = thirdRow  + firstRowCursorY;
+  double fourthRowCursorY = fourthRow + firstRowCursorY;
+  double fifthRowCursorY = fifthRow + firstRowCursorY;
+
+  tft.setTextSize(4);
+  tft.setTextColor(NEONGREEN);
+  
+  //Insert Number 1
+  tft.setCursor(leftColCursorX,secondRowCursorY);
+  tft.println("1");
+
+  //Insert Number 2
+  tft.setCursor(midColCursorX,secondRowCursorY);
+  tft.println("2");
+
+  //Insert Number 3
+  tft.setCursor(rightColCursorX,secondRowCursorY);
+  tft.println("3");
+
+  //Insert Number 4
+  tft.setCursor(leftColCursorX,thirdRowCursorY);
+  tft.println("4");
+
+  //Insert Number 5
+  tft.setCursor(midColCursorX,thirdRowCursorY);
+  tft.println("5");
+
+  //Insert Number 6
+  tft.setCursor(rightColCursorX,thirdRowCursorY);
+  tft.println("6");
+
+  //Insert Number 7
+  tft.setCursor(leftColCursorX,fourthRowCursorY);
+  tft.println("7");
+
+  //Insert Number 8
+  tft.setCursor(midColCursorX,fourthRowCursorY);
+  tft.println("8");
+
+  //Insert Number 9
+  tft.setCursor(rightColCursorX,fourthRowCursorY);
+  tft.println("9");
+
+  //Insert DEL Character
+  tft.setCursor(leftColCursorX-15,fifthRowCursorY+5);
+  tft.setTextSize(3);
+  tft.println("DEL");
+  tft.setTextSize(4);
+
+  //Insert Number 0
+  tft.setCursor(midColCursorX,fifthRowCursorY);
+  tft.println("0");
+
+  //Insert OK Character
+  tft.setCursor(rightColCursorX-5,fifthRowCursorY+5);
+  tft.setTextSize(3);
+  tft.println("OK");
+  tft.setTextSize(4);
+}
+
+void retrieveTouch()
+{
+    digitalWrite(13, HIGH); 
+    TSPoint p = ts.getPoint();
+    digitalWrite(13, LOW);
+
+    //If sharing pins, you'll need to fix the directions of the touchscreen pins
+    pinMode(XM, OUTPUT); 
+    pinMode(YP, OUTPUT); 
+  
+    //Scale from 0->1023 to tft.width
+    X = map(p.x, TS_MAXX, TS_MINX, 0, tft.width());
+    Y = map(p.y, TS_MAXY, TS_MINY, 0, tft.height());
+    Z = p.z;
+}
+
+void openDoor(){
+  digitalWrite(DO, LOW);
+  delay(2000);
+  digitalWrite(DO, HIGH); 
+}
+
+void gameOver(){
+    tft.setTextSize(8);
+    tft.fillScreen(BLACK);
+    tft.setCursor(leftColPositionX,secondRow + verticalAlign);
+    tft.println("GAME");
+    tft.setCursor(leftColPositionX,thirdRow + verticalAlign);
+    tft.println("OVER");
+    delay(1000);
+    tft.fillScreen(BLACK);
+    delay(1000);
+    gameOver();
+}
+
+void fail(){
+  if(attempts > 1){
+    attempts--;
+    tft.fillScreen(BLACK);
+    tft.setCursor(leftColPositionX,secondRow + verticalAlign);
+    tft.println(attempts);
+    tft.setCursor(leftColPositionX,thirdRow + verticalAlign);
+    if(attempts > 1) {tft.println("ATTEMPTS");} else {tft.println("ATTEMPT");}
+    tft.setCursor(leftColPositionX,fourthRow + verticalAlign);
+    tft.println("LEFT");
+    
+    delay(4000);
+    
+    tft.fillScreen(BLACK);
+    tft.drawRect(leftColPositionX + 25 + textsize*pos-5, firstRowCursorY-5, (textsize/2)+10, textsize, boxcolor);
+    createButtons();
+    insertNumbers(); 
+    pos = 0;
+    firstRowCursorY  = verticalAlign+(BOXSIZE/4);
+    tft.setCursor(leftColPositionX + 25 + textsize*pos,firstRowCursorY);
+    Serial.println(F("Press any button on the TFT screen: "));
+    
+  } else {
+    // GAME OVER
+    openDoor();
+    gameOver();
+  }
+}
+
+void succes(){
+  // SUCCESS 
+  tft.fillScreen(BLACK);
+  tft.setCursor(35,thirdRow + verticalAlign);
+  tft.println("SUCCESS");
+  openDoor();
+  delay(6000);
+  setup(); 
+}
+
+void codeCheck(){
+  bool match = true;
+  //input vergelijken met code
+  for(int i=0; i<4; i++){
+    Serial.print(input[i]);
+    if(input[i] != code[i]){
+      match = false;
+    }
+  }
+  Serial.println();
+
+  if(match){
+    succes();
+  } else {
+    fail();  
+  } 
+}
+
+void setup_disp(){
+  tft.reset();  
+  uint16_t identifier = tft.readID();
+  tft.begin(identifier);
+
+  tft.setRotation(0);
+
+  //Background color
+  tft.fillScreen(BLACK);
+
+  // cursor box
+  tft.drawRect(leftColPositionX + 25 + textsize*pos-5, firstRowCursorY-5, (textsize/2)+10, textsize, boxcolor);
+  
+  createButtons();
+  insertNumbers();
+
+  //DispCursorX  = leftColPositionX + 25;
+  pos = 0;
+  firstRowCursorY  = verticalAlign+(BOXSIZE/4);
+  tft.setCursor(leftColPositionX + 25 + textsize*pos,firstRowCursorY);
+  Serial.println(F("Press any button on the TFT screen: "));
+}
+
+// callback function, only used when receiving messages
+void callback(char *topic, byte *message, unsigned int length)
+{
+  Serial.print("Message arrived on topic: ");
+  Serial.print(topic);
+  Serial.print(". Message: ");
+  String messageTemp;
+
+  for (int i = 0; i < length; i++)
   {
-    if (Y>265)
-    {Serial.println ("Button 0"); //Button 0 is Pressed
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=0;
-    else
-    Number = (Number*10) + 0; //Pressed twice
-    }
-    
-    if (Y>205 && Y<255)
-    {Serial.println ("Button 2"); 
-    Button_ACK_Tone();
-     if (Number==0)
-    Number=2;
-    else
-    Number = (Number*10) + 2; //Pressed twice
-    }
-    
-     if (Y>145 && Y<195)
-    {Serial.println ("Button 5"); 
-    Button_ACK_Tone();
-     if (Number==0)
-    Number=5;
-    else
-    Number = (Number*10) + 5; //Pressed twic
-    }
-    
-     if (Y>85 && Y<135)
-    {Serial.println ("Button 8"); 
-    Button_ACK_Tone();
-     if (Number==0)
-    Number=8;
-    else
-    Number = (Number*10) + 8; //Pressed twic
-    }   
+    Serial.print((char)message[i]);
+    messageTemp += (char)message[i];
   }
+  Serial.println();
 
-  if (X>0 && X<75) //Detecting Buttons on Column 3
+  // Feel free to add more if statements to control more GPIOs with MQTT
+  // When receiving a message on "esp32/+/control" a check should be executed
+
+  // If a message is received on the topic esp32/control, you check if the message is either "start" or "stop" (or "reset").
+  // Changes the state according to the message
+  if (String(topic) == "esp32/alohomora/control")
   {
-    if (Y>265)
-    {Serial.println ("Button OK"); 
-    result = true;
+    if(messageTemp.equals("open")){openDoor();}
+    if(messageTemp.equals("AddAttempt")){attempts++;}
+    if(messageTemp.equals("ready")){
+      espClient.stop();
+      delay(100);
+      WiFi.disconnect(true, true);
+      wifi = false;
+      Serial.println("Disconnected");
+      setup_disp();
     }
-    
-     if (Y>205 && Y<255)
-    {Serial.println ("Button 3"); 
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=3;
-    else
-    Number = (Number*10) + 3; //Pressed twice
-    }
-    
-     if (Y>145 && Y<195)
-    {Serial.println ("Button 6"); 
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=6;
-    else
-    Number = (Number*10) + 6; //Pressed twice
-    }
-    
-     if (Y>85 && Y<135)
-    {Serial.println ("Button 9");
-    Button_ACK_Tone();
-    if (Number==0)
-    Number=9;
-    else
-    Number = (Number*10) + 9; //Pressed twice
-    }   
+    if(messageTemp.equals("start")){setup_disp();}
   }
-
-}
-
-/********************************************************************//**
- * @brief     shows the intro screen in setup procedure
- * @param[in] None
- * @return    None
- *********************************************************************/
-void IntroScreen()
-{
-  //Draw the Result Box
-  tft.fillRect(0, 0, 240, 320, ILI9341_WHITE);
-  tft.drawRGBBitmap(20,80, Zihatec_Logo,200,60);
-  tft.setTextSize(0);
-  tft.setTextColor(ILI9341_BLACK);
-  tft.setFont(&FreeSansBold9pt7b);  
-
-  tft.setCursor(45, 190);
-  tft.println("ArduiTouch ESP");
-  
-  tft.setCursor(43, 215);
-  tft.println("Keylock example");
-
-}
-
-
-/********************************************************************//**
- * @brief     shows the entered numbers (stars)
- * @param[in] None
- * @return    None
- *********************************************************************/
-void DisplayResult()
-{
-    String s1="";
-    //String s2  = String(Number);
-    tft.fillRect(0, 0, 240, 80, ILI9341_CYAN);  //clear result box
-    tft.setCursor(10, 20);
-    tft.setTextSize(4);
-    tft.setTextColor(ILI9341_BLACK);
-    if (Number == 0) {
-      tft.println(" ");
-    } else { 
-       for (int i=0;i< String(Number).length();i++)
-       s1 = s1 + "*";
-       tft.println(s1); //update new value
-    }   
-}
-
-
-/********************************************************************//**
- * @brief     draws a result box after code confirmation with ok button
- * @param[in] color background color of result box
- * @param[in] test  string to display in result box area
- * @param[in] xPos  X position of text output
- * @return    None
- *********************************************************************/
-void draw_Result_Box(int color, String text, int xPos)
-{
-   //Draw the Result Box
-   tft.fillRect(0, 0, 240, 80, color);
-   tft.setCursor(xPos, 26);
-   tft.setTextSize(3);
-   tft.setTextColor(ILI9341_WHITE);
-
-   // draw text
-   tft.println(text);
-}
-
-/********************************************************************//**
- * @brief     draws the keypad
- * @param[in] None
- * @return    None
- *********************************************************************/
-void draw_BoxNButtons()
-{
-  
-   //clear screen black
-  tft.fillRect(0, 0, 240, 320, ILI9341_BLACK);
-  tft.setFont(0);  
-  
-  //Draw the Result Box
-  tft.fillRect(0, 0, 240, 80, ILI9341_CYAN);
-
-  //Draw C and OK field   
-  tft.fillRect  (0,260,80,60,ILI9341_RED);
-  tft.fillRect  (160,260,80,60,ILI9341_GREEN); 
-  
-  //Draw Horizontal Lines
-  for (int h=80; h<=320; h+=60)
-  tft.drawFastHLine(0, h, 240, ILI9341_WHITE);
-
-  //Draw Vertical Lines
-  for (int v=80; v<=240; v+=80)
-  tft.drawFastVLine(v, 80, 240, ILI9341_WHITE);
-
-  //Display keypad lables 
-  for (int j=0;j<4;j++) {
-    for (int i=0;i<3;i++) {
-      tft.setCursor(32 + (80*i), 100 + (60*j)); 
-      if ((j==3) && (i==2)) tft.setCursor(24 + (80*i), 100 + (60*j)); //OK button
-      tft.setTextSize(3);
-      tft.setTextColor(ILI9341_WHITE);
-      tft.println(symbol[j][i]);
-    }
-  }
+  if (String(topic) == "esp32/alohomora/code/1"){code[0] = (int) message[0];}
+  if (String(topic) == "esp32/alohomora/code/2"){code[1] = (int) message[0];}
+  if (String(topic) == "esp32/alohomora/code/3"){code[2] = (int) message[0];}
+  if (String(topic) == "esp32/alohomora/code/4"){code[3] = (int) message[0];}
 }
 
 void setup() {
-  Serial.begin(115200); //Use serial monitor for debugging
 
-  pinMode(TFT_LED, OUTPUT); // define as output for backlight control
-
-  Serial.println("Init TFT and Touch...");
-  tft.begin();
-  touch.begin();
-  Serial.print("tftx ="); Serial.print(tft.width()); Serial.print(" tfty ="); Serial.println(tft.height());
-  tft.fillScreen(ILI9341_BLACK);
+  //Setup gedeelte voor Wifi en MQTT
+  connected = false;
+  //setup wifi
+  //Serial.begin(115200);
+  Serial.begin(9600);
   
-  IntroScreen();
-  digitalWrite(TFT_LED, LOW);    // LOW to turn backlight on; 
+  setup_wifi();
+  client.setServer(MQTT_SERVER, MQTT_PORT);
+  client.setCallback(callback);
 
-  delay(1500);
+  //setup voor OTA
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Hi! I am ESP32.");
+  });
 
-  digitalWrite(TFT_LED, HIGH);    // HIGH to turn backlight off - will hide the display during drawing
-  draw_BoxNButtons(); 
-  digitalWrite(TFT_LED, LOW);    // LOW to turn backlight on; 
+  AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+  server.begin();
+  Serial.println("HTTP server started");
+  
+  //Setup gedeelte voor display
+  pinMode(DO, OUTPUT); 
+  digitalWrite(DO, HIGH); 
+    
+  //Serial.begin(9600);
+  
+  tft.reset();  
+  uint16_t identifier = tft.readID();
+  tft.begin(identifier);
 
-  //sound configuration
-  ledcSetup(0,1E5,12);
-  ledcAttachPin(21,0);
+  tft.setRotation(0);
 
+  //Background color
+  tft.fillScreen(BLACK);
+
+  // cursor box
+  tft.drawRect(leftColPositionX + 25 + textsize*pos-5, firstRowCursorY-5, (textsize/2)+10, textsize, boxcolor);
+  
+  createButtons();
+  insertNumbers();
+
+  //DispCursorX  = leftColPositionX + 25;
+  pos = 0;
+  firstRowCursorY  = verticalAlign+(BOXSIZE/4);
+  tft.setCursor(leftColPositionX + 25 + textsize*pos,firstRowCursorY);
+  Serial.println(F("Press any button on the TFT screen: "));
+}
+
+// function to establish MQTT connection
+void reconnect()
+{
+  delay(10);
+  // Loop until we're reconnected
+  while (!connected)
+  {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("alohomora"))
+    {
+      Serial.println("connected");
+      connected = true;
+      // Publish
+      client.publish("esp32/alohomora/control", "Touchlock gestart");
+      // ... and resubscribe
+      client.subscribe("esp32/alohomora/+");
+      Serial.print("gelukt");
+    }
+    else
+    {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
 }
 
 void loop() {
-  // check touch screen for new events
-  if (Touch_Event()== true) { 
-    X = p.y; Y = p.x;
-    Touch_pressed = true;
-    
-  } else {
-    Touch_pressed = false;
-  }
-
-  // if touch is pressed detect pressed buttons
-  if (Touch_pressed == true) {
-    
-    DetectButtons();
-  
-    if (result==true) {
-      if (Number == codenum) {
-        draw_Result_Box(ILI9341_GREEN,"CODE OK",(int)60);
-        ledcWriteTone(0,1000);
-        delay(800);
-        ledcWriteTone(0,0);
-      } else {
-        draw_Result_Box(ILI9341_RED, "WRONG CODE",(int)30);
-        for (int i=0;i< 3;i++) {
-          ledcWriteTone(0,4000);
-          delay(100);
-          ledcWriteTone(0,0);
-          delay(50);      
-        }
+  //wifi gedeelte
+  if(wifi){
+    if (!connected)
+      {
+      reconnect();
       }
-      delay(1000);
-      Number = 0; 
-      result=false;
+    client.loop();
+    AsyncElegantOTA.loop();
+  }
+  //display gedeelte
+  retrieveTouch();
+  //int boxHeightRow1 = verticalAlign + BOXSIZE;
+  int boxHeightRow2 = secondRow + BOXSIZE;
+  int boxHeightRow3 = thirdRow + BOXSIZE;
+  int boxHeightRow4 = fourthRow + BOXSIZE;
+  int boxHeightRow5 = fifthRow + BOXSIZE;
+  
+  if(Z > MINPRESSURE && Z < MAXPRESSURE && !isTouching){
+    // set touch status to active
+    isTouching = true;
+    // clear if already number at this position
+    tft.fillRect(leftColPositionX + 25 + textsize*pos - 5, firstRowCursorY - 5, textsize, textsize, tbgcolor);
+    //Check if element clicked is in left column
+    if(X > leftColPositionX && X < (leftColPositionX+BOXSIZE)){
+      //Check if element clicked is in row 2
+      if(Y > verticalAlign){
+        if(Y < boxHeightRow2){
+             //Serial.println("1");
+             tft.println("1");
+             input[pos]=1;
+             pos++;
+             delay(150); 
+        }
+        //Check if element clicked is in row 3
+        else if(Y < boxHeightRow3){
+             //Serial.println("4");
+             tft.println("4");
+             input[pos]=4;
+             pos++;
+             delay(150); 
+        }
+        //Check if element clicked is in row 4
+        else if(Y < boxHeightRow4){
+             //Serial.println("7");
+             tft.println("7");
+             input[pos]=7;
+             pos++;
+             delay(150); 
+        }
+        //Check if element clicked is in row 5
+        else if(Y < boxHeightRow5){
+             //Serial.println("*");
+             if(pos > 0 && !isAtEnd){pos--;}
+             input[pos]=-1;
+             // tft.fillRect(DispCursorX, firstRowCursorY, textsize, textsize, tbgcolor);
+             delay(150); 
+        }        
+      }
+       //Check if element clicked is in mid column
+    } else if (X > midColPositionX && X < (midColPositionX+BOXSIZE)){
+      //Check if element clicked is in row 2
+        if(Y > verticalAlign){
+          if(Y < boxHeightRow2){
+               //Serial.println("2");
+               tft.println("2");
+               input[pos]=2;
+               pos++;
+               delay(150); 
+          }
+          //Check if element clicked is in row 3
+          else if(Y < boxHeightRow3){
+               //Serial.println("5");
+               tft.println("5");
+               input[pos]=5;
+               pos++;
+               delay(150); 
+          }
+          //Check if element clicked is in row 4
+          else if(Y < boxHeightRow4){
+               //Serial.println("8");
+               tft.println("8");
+               input[pos]=8;
+               pos++;
+               delay(150); 
+          }
+          //Check if element clicked is in row 5
+          else if(Y < boxHeightRow5){
+               //Serial.println("0");
+               tft.println("0");
+               input[pos]=0;
+               pos++;
+               delay(150); 
+          }      
+        }
+      //Check if element clicked is in third column
+    } else if (X > rightColPositionX && X < (rightColPositionX+BOXSIZE)){
+        if(Y > verticalAlign){
+          //Check if element clicked is in row 2
+          if(Y < boxHeightRow2){
+               //Serial.println("3");
+               tft.println("3");
+               input[pos]=3;
+               pos++;
+               delay(150); 
+          }
+          //Check if element clicked is in row 3
+          else if(Y < boxHeightRow3){
+               //Serial.println("6");
+               tft.println("6");
+               input[pos]=6;
+               pos++;
+               delay(150); 
+          }
+          //Check if element clicked is in row 4
+          else if(Y < boxHeightRow4){
+               //Serial.println("9");
+               tft.println("9");
+               input[pos]=9;
+               pos++;
+               delay(150); 
+          }
+          //Check if element clicked is in row 5
+          else if(Y < boxHeightRow5){
+               //Serial.println("#");
+               //check of code matcht
+               codeCheck();
+               delay(150); 
+          }        
+        }
     }
-
-    DisplayResult(); 
-  }    
-  delay(100);
-  ledcWriteTone(0,0);
-
+    if(pos > 3){
+      pos = 3;
+      isAtEnd = true;
+    } else {
+      isAtEnd = false;
+      tft.fillRect(leftColPositionX + 25 + textsize*pos - 5, firstRowCursorY - 5, textsize, textsize, tbgcolor);
+    }
+    tft.setCursor(leftColPositionX + 25 + textsize*pos,firstRowCursorY);
+    tft.drawRect(leftColPositionX + 25 + textsize*pos-5, firstRowCursorY-5, (textsize/2)+10, textsize, boxcolor);
+  } else {isTouching = false;} 
 }
-
-
